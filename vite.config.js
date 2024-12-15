@@ -4,14 +4,20 @@ import path from 'path'
 
 export default defineConfig({
   plugins: [vue()],
-  root: 'public',
-  build: {
-    outDir: path.resolve(__dirname, 'dist')
-  },
-  publicDir: 'public',
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, 'src')
+      '@': path.resolve(__dirname, './src')
     }
+  },
+  build: {
+    outDir: 'dist',
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'public/index.html')
+      }
+    }
+  },
+  server: {
+    port: 3000
   }
 })
