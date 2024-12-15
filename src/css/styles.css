@@ -1,0 +1,101 @@
+/* Main layout */
+.interview-container {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    padding: 20px;
+}
+
+/* Video container */
+.video-container {
+    width: 100%;
+    aspect-ratio: 16/9;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+/* Status indicators */
+.status-indicator {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-active {
+    background-color: #28a745;
+}
+
+.status-inactive {
+    background-color: #dc3545;
+}
+
+/* Interview panel */
+.interview-panel {
+    background: white;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question-display {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+}
+
+/* Response area */
+.response-area {
+    margin-top: 15px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 6px;
+    min-height: 100px;
+}
+
+/* Progress bar */
+.progress {
+    height: 20px;
+    margin-bottom: 15px;
+}
+
+.progress-bar {
+    transition: width 0.3s ease;
+}
+
+/* Timer */
+.timer {
+    font-size: 1.1em;
+    color: #6c757d;
+    margin: 10px 0;
+}
+
+/* Feedback section */
+.feedback-container {
+    margin-top: 20px;
+    padding: 15px;
+    background: #e9ecef;
+    border-radius: 6px;
+}
+
+/* Animation for recording indicator */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.recording-indicator {
+    animation: pulse 1.5s infinite;
+    color: #dc3545;
+}
