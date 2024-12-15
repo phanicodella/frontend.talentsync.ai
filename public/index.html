@@ -2,14 +2,32 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>TalentSync - AI Interview Platform</title>
-    <!-- Bootstrap for quick styling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalentSync - AI-Powered Interview Platform</title>
+    
+    <!-- Performance Optimization: Preload Critical Assets -->
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style">
+    <link rel="preload" href="https://unpkg.com/vue@3/dist/vue.global.js" as="script">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" as="script">
+    
+    <!-- Stylesheets -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="/css/styles.css" rel="stylesheet">
-    <!-- Vue.js for reactivity -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <!-- Face-api.js for face detection -->
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    
+    <!-- SEO and Performance Meta Tags -->
+    <meta name="description" content="AI-powered interview platform for seamless candidate assessments">
+    <meta name="keywords" content="AI interview, talent assessment, interview platform">
+    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://talentsync.ai">
+    <meta property="og:title" content="TalentSync - AI Interview Platform">
+    <meta property="og:description" content="Revolutionary AI-powered interview assessment tool">
+    
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="TalentSync - AI Interview Platform">
 </head>
 <body>
     <div id="app">
@@ -26,75 +44,87 @@
                 <p class="text-muted">Your AI-powered interview platform</p>
                 <div class="mb-3">
                     <label class="form-label">Email:</label>
-                    <input type="email" v-model="email" class="form-control" required>
+                    <input type="email" v-model="email" class="form-control" required aria-describedby="emailHelp">
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Name:</label>
                     <input type="text" v-model="name" class="form-control" required>
                 </div>
-                <button @click="startInterview" class="btn btn-primary">Begin Interview</button>
+                <button @click="startInterview" class="btn btn-primary" :disabled="!email || !name">
+                    Begin Interview
+                </button>
             </div>
 
             <!-- Interview Section -->
-            <!-- Interview Section -->
-<div v-if="isLoggedIn" class="interview-container">
-    <div class="video-section">
-        <div class="video-container">
-            <video id="video" autoplay muted></video>
-        </div>
-        <div class="status-bar mt-2">
-            <span class="status-indicator" :class="faceDetected ? 'status-active' : 'status-inactive'"></span>
-            Face Detection: {{faceDetected ? 'Active' : 'Not Detected'}}
-        </div>
-    </div>
+            <div v-if="isLoggedIn" class="interview-container">
+                <div class="video-section">
+                    <div class="video-container">
+                        <video id="video" autoplay muted></video>
+                    </div>
+                    <div class="status-bar mt-2">
+                        <span class="status-indicator" :class="faceDetected ? 'status-active' : 'status-inactive'"></span>
+                        Face Detection: {{faceDetected ? 'Active' : 'Not Detected'}}
+                    </div>
+                </div>
     
-    <div class="interview-panel">
-        <h4>Interview Progress</h4>
-        <div class="question-display">
-            <h5>{{currentQuestion?.question}}</h5>
-        </div>
-        <div v-if="isAnswering" class="timer text-muted mb-2">
-            Time remaining: {{timeLeft}} seconds
-        </div>
+                <div class="interview-panel">
+                    <h4>Interview Progress</h4>
+                    <div class="question-display">
+                        <h5>{{currentQuestion?.question}}</h5>
+                    </div>
+                    <div v-if="isAnswering" class="timer text-muted mb-2">
+                        Time remaining: {{timeLeft}} seconds
+                    </div>
         
-        <div class="controls">
-            <button 
-                @click="isAnswering ? stopAnswering() : startAnswering()" 
-                class="btn"
-                :class="isAnswering ? 'btn-danger' : 'btn-success'"
-            >
-                {{isAnswering ? 'Stop Answer' : 'Start Answer'}}
-            </button>
-        </div>
+                    <div class="controls">
+                        <button 
+                            @click="isAnswering ? stopAnswering() : startAnswering()" 
+                            class="btn"
+                            :class="isAnswering ? 'btn-danger' : 'btn-success'"
+                        >
+                            {{isAnswering ? 'Stop Answer' : 'Start Answer'}}
+                        </button>
+                    </div>
     
-        <!-- Always show the response area, but empty when no transcription -->
-        <div class="response-area mt-3">
-            <strong>Your Answer:</strong>
-            <p v-if="transcription">{{transcription}}</p>
-            <p v-else class="text-muted">Your response will appear here as you speak...</p>
-        </div>
-        <div v-if="showResults">
-            <interview-dashboard :interview-results="interviewResults"></interview-dashboard>
-          </div>
-        <div class="progress mb-3">
-            <div class="progress-bar" 
-                 :style="{ width: (((currentQuestionIndex + 1) / questions.length) * 100) + '%' }">
-                Question {{currentQuestionIndex + 1}} of {{questions.length}}
+                    <div class="response-area mt-3">
+                        <strong>Your Answer:</strong>
+                        <p v-if="transcription">{{transcription}}</p>
+                        <p v-else class="text-muted">Your response will appear here as you speak...</p>
+                    </div>
+                    <div v-if="showResults">
+                        <interview-dashboard :interview-results="interviewResults"></interview-dashboard>
+                    </div>
+                    <div class="progress mb-3">
+                        <div class="progress-bar" 
+                             :style="{ width: (((currentQuestionIndex + 1) / questions.length) * 100) + '%' }">
+                            Question {{currentQuestionIndex + 1}} of {{questions.length}}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
+    </div>
 
-    </div>
-</div>
-        </div>
-    </div>
-<!-- Core Scripts -->
-<script src="/js/constants.js"></script>
-<script src="/js/utils.js"></script>
-<script src="/js/services/api.js"></script>
-<script src="/js/questions.js"></script>
-<script src="/js/faceDetection.js"></script>
-<script src="/js/speechRecognition.js"></script>
-<script src="/js/analytics.js"></script>
-<script src="/js/app.js"></script>
+    <!-- Performance Optimization: Defer Non-Critical Scripts -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+
+    <!-- Core Scripts with Async Loading -->
+    <script src="/js/constants.js" async></script>
+    <script src="/js/utils.js" async></script>
+    <script src="/js/services/api.js" async></script>
+    <script src="/js/questions.js" async></script>
+    <script src="/js/faceDetection.js" async></script>
+    <script src="/js/speechRecognition.js" async></script>
+    <script src="/js/analytics.js" async></script>
+    <script src="/js/app.js" async></script>
+
+    <!-- Optional: Performance and Analytics -->
+    <script>
+        // Basic performance tracking
+        window.addEventListener('load', () => {
+            console.log('Page fully loaded');
+        });
+    </script>
 </body>
 </html>

@@ -4,9 +4,12 @@
   "description": "TalentSync AI Interview System Frontend",
   "main": "server.js",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "serve": "vite preview"
+    "install": "yarn install",
+    "setup": "yarn add compression helmet",
+    "lint": "eslint .",
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "echo 'No build step needed'"
   },
   "dependencies": {
     "cors": "^2.8.5",
