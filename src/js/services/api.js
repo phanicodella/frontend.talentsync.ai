@@ -1,6 +1,5 @@
-// frontend/src/js/services/api.js
 const api = {
-    baseURL: 'http://localhost:5000/api',
+    baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api.talentsync.tech/api',
     
     async handleResponse(response) {
         const data = await response.json();
@@ -16,31 +15,31 @@ const api = {
     },
 
     async createInterview(candidateData) {
-        console.log('Creating interview with data:', candidateData);
         try {
             const response = await fetch(`${this.baseURL}/interviews/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify(candidateData)
             });
+    
             return await this.handleResponse(response);
         } catch (error) {
-            console.error('Create Interview Error:', error);
+            console.error('Interview Creation Error:', error);
             throw error;
         }
     },
 
     async submitAnswer(interviewId, answerData) {
-        console.log('Submitting answer:', { interviewId, ...answerData });
         try {
             const response = await fetch(`${this.baseURL}/interviews/answer`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 },
                 body: JSON.stringify({
                     interviewId,
@@ -55,13 +54,13 @@ const api = {
     },
 
     async endInterview(interviewId) {
-        console.log('Ending interview:', interviewId);
         try {
             const response = await fetch(`${this.baseURL}/interviews/${interviewId}/end`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
             });
             return await this.handleResponse(response);
@@ -72,13 +71,13 @@ const api = {
     },
 
     async getInterview(interviewId) {
-        console.log('Getting interview:', interviewId);
         try {
             const response = await fetch(`${this.baseURL}/interviews/${interviewId}`, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
                 }
             });
             return await this.handleResponse(response);
@@ -90,3 +89,4 @@ const api = {
 };
 
 window.api = api;
+export default api;

@@ -19,6 +19,8 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.1",
+    "compression": "^1.7.5",
+    "helmet": "^8.0.0",
     "nodemon": "^3.1.9",
     "vite": "^6.0.3"
   }
