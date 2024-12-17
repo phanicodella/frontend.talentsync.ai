@@ -1,33 +1,25 @@
-const api = {
-    baseURL: import.meta.env.VITE_API_BASE_URL || 'https://api.talentsync.tech/api',
+window.api = {
+    baseURL: 'http://localhost:5000/api',
     
-    async handleResponse(response) {
-        const data = await response.json();
-        console.log('API Response:', {
-            status: response.status,
-            data: data
-        });
-        
-        if (!response.ok) {
-            throw new Error(data.details || data.error || 'API request failed');
-        }
-        return data;
-    },
-
     async createInterview(candidateData) {
         try {
             const response = await fetch(`${this.baseURL}/interviews/create`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${window.authService.getToken()}`
                 },
                 body: JSON.stringify(candidateData)
             });
-    
-            return await this.handleResponse(response);
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to create interview');
+            }
+
+            return await response.json();
         } catch (error) {
-            console.error('Interview Creation Error:', error);
+            console.error('Interview creation failed:', error);
             throw error;
         }
     },
@@ -38,17 +30,22 @@ const api = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${window.authService.getToken()}`
                 },
                 body: JSON.stringify({
                     interviewId,
                     ...answerData
                 })
             });
-            return await this.handleResponse(response);
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to submit answer');
+            }
+
+            return await response.json();
         } catch (error) {
-            console.error('Submit Answer Error:', error);
+            console.error('Answer submission failed:', error);
             throw error;
         }
     },
@@ -59,34 +56,19 @@ const api = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${window.authService.getToken()}`
                 }
             });
-            return await this.handleResponse(response);
-        } catch (error) {
-            console.error('End Interview Error:', error);
-            throw error;
-        }
-    },
 
-    async getInterview(interviewId) {
-        try {
-            const response = await fetch(`${this.baseURL}/interviews/${interviewId}`, {
-                method: 'GET',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Accept': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                }
-            });
-            return await this.handleResponse(response);
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to end interview');
+            }
+
+            return await response.json();
         } catch (error) {
-            console.error('Get Interview Error:', error);
+            console.error('Failed to end interview:', error);
             throw error;
         }
     }
 };
-
-window.api = api;
-export default api;

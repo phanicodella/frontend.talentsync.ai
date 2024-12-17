@@ -1,39 +1,35 @@
+// frontend/src/js/app.js
 const { createApp } = Vue;
 
 createApp({
     data() {
         return {
             isLoggedIn: false,
+            isLoading: false,
             email: '',
             name: '',
             token: null,
+            currentInterviewId: null,
+            roomUrl: null,
             currentQuestion: null,
-            questions: [],
+            questions: window.interviewQuestions || [],
             currentQuestionIndex: 0,
             isAnswering: false,
             transcription: '',
-            interimTranscript: '',
-            finalTranscript: '',
             faceDetected: false,
-            interviewStarted: false,
-            feedback: {},
-            video: null,
-            stream: null,
+            videoInitialized: false,
+            videoError: null,
+            remoteParticipantJoined: false,
+            deviceStatus: {
+                camera: true,
+                microphone: true
+            },
+            interviewResults: null,
+            showResults: false,
             timeLeft: 0,
             timer: null,
-            answers: [],
-            interviewStats: {
-                totalDuration: 0,
-                averageWordCount: 0,
-                faceDetectionScore: 0,
-            },
-            currentInterviewId: null,
-            roomUrl: null,
-            showResults: false,
-            interviewResults: null,
-            apiError: null,
-            faceDetectionInitialized: false,
-            speechRecognitionInitialized: false,
+            retryAttempts: 3,
+            retryDelay: 1000
         };
     },
 
@@ -41,211 +37,369 @@ createApp({
         progress() {
             return ((this.currentQuestionIndex + 1) / this.questions.length) * 100;
         },
+        
+        canProceed() {
+            return this.videoInitialized && this.faceDetected;
+        }
     },
 
     methods: {
-        async login() {
-            try {
-                if (!this.email || !this.name) {
-                    alert('Please provide your email and password.');
-                    return;
-                }
-
-                const response = await fetch('http://localhost:5000/api/auth/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email: this.email, password: this.name }),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Login failed. Check your credentials.');
-                }
-
-                const data = await response.json();
-                this.token = data.token;
-                localStorage.setItem('token', this.token);
-                this.isLoggedIn = true;
-                alert('Login successful!');
-            } catch (error) {
-                console.error('Login error:', error);
-                alert('Failed to log in. Please try again.');
-            }
-        },
-
         async startInterview() {
+            this.resetInterviewState();
+            this.isLoading = true;
+
             try {
-                const response = await fetch('http://localhost:5000/api/interviews/create', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${this.token}`,
-                    },
-                    body: JSON.stringify({ email: this.email, name: this.name }),
-                });
+                console.log('Starting interview process...', { email: this.email, name: this.name });
+                
+                this.validateInputs();
+                const authResult = await this.authenticateCandidate();
+                console.log('Authentication successful:', authResult);
 
-                if (!response.ok) {
-                    throw new Error('Failed to create interview session.');
-                }
+                const interviewResponse = await this.createInterviewSession();
+                console.log('Interview session creation response:', interviewResponse);
 
-                const session = await response.json();
-                this.currentInterviewId = session._id;
-                this.roomUrl = session.roomUrl;
-                this.interviewStarted = true;
+                await this.initializeServices(interviewResponse.data);
+                this.setInterviewState(interviewResponse);
 
-                await this.initializeServices();
-                this.loadQuestions();
             } catch (error) {
-                console.error('Error starting interview:', error);
-                alert('Failed to initialize the interview session.');
+                console.error('Interview Start Error', {
+                    message: error.message,
+                    stack: error.stack
+                });
+                this.videoError = error.message || 'Failed to start interview';
+                this.isLoggedIn = false;
+            } finally {
+                this.isLoading = false;
             }
         },
 
-        async initializeServices() {
-            await this.initializeCamera();
-            await this.initializeFaceDetection();
-            await this.initializeSpeechRecognition();
+        resetInterviewState() {
+            console.log('Resetting interview state');
+            this.videoError = null;
+            this.currentInterviewId = null;
+            this.roomUrl = null;
+            this.videoInitialized = false;
+            this.isLoggedIn = false;
+            this.transcription = '';
+            this.faceDetected = false;
+            this.isAnswering = false;
+            if (this.timer) clearInterval(this.timer);
         },
 
-        async initializeCamera() {
+        validateInputs() {
+            if (!this.email || !this.name) {
+                throw new Error('Email and full name are required');
+            }
+            if (!this.email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+                throw new Error('Please enter a valid email address');
+            }
+            if (this.name.length < 2) {
+                throw new Error('Name must be at least 2 characters long');
+            }
+            console.log('Input validation passed');
+        },
+
+        async authenticateCandidate() {
             try {
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: true,
-                    audio: true,
+                console.log('Authenticating candidate...');
+                const authResult = await window.authService.candidateAccess(this.email, this.name);
+                this.token = authResult.token;
+                console.log('Authentication successful', { email: this.email });
+                return authResult;
+            } catch (error) {
+                console.error('Authentication failed', error);
+                throw new Error('Unable to authenticate. Please try again.');
+            }
+        },
+
+        async createInterviewSession() {
+            try {
+                console.log('Creating interview session...', { email: this.email, name: this.name });
+                const interviewResponse = await window.api.createInterview({ 
+                    email: this.email, 
+                    name: this.name 
                 });
 
-                this.stream = stream;
-                this.video = document.getElementById('video');
+                console.log('Interview creation response:', interviewResponse);
 
-                if (this.video) {
-                    this.video.srcObject = stream;
-                    await this.video.play();
-                } else {
-                    throw new Error('Video element not found.');
+                if (!interviewResponse.data || !interviewResponse.data.roomUrl) {
+                    console.error('Invalid interview response:', interviewResponse);
+                    throw new Error('Failed to create video room');
                 }
+
+                return interviewResponse;
             } catch (error) {
-                console.error('Camera initialization failed:', error);
-                alert('Ensure your camera is accessible and permissions are granted.');
+                console.error('Interview creation failed', error);
+                throw new Error('Unable to create interview session');
+            }
+        },
+
+        async initializeServices(interviewData) {
+            try {
+                console.log('Initializing services...');
+
+                // Initialize video first
+                await this.initializeVideoSession(interviewData.roomUrl, interviewData.token);
+                console.log('Video initialized successfully');
+
+                // Then face detection
+                await this.initializeFaceDetection();
+                console.log('Face detection initialized successfully');
+
+                // Finally speech recognition
+                await this.initializeSpeechRecognition();
+                console.log('Speech recognition initialized successfully');
+
+                console.log('All services initialized successfully');
+            } catch (error) {
+                console.error('Service initialization failed', error);
+                throw new Error('Failed to initialize interview services');
+            }
+        },
+
+        setInterviewState(interviewResponse) {
+            console.log('Setting interview state:', interviewResponse.data);
+            this.currentInterviewId = interviewResponse.data._id;
+            this.roomUrl = interviewResponse.data.roomUrl;
+            this.isLoggedIn = true;
+            this.currentQuestion = this.questions[0];
+            this.setupQuestionTimer();
+        },
+
+        async initializeVideoSession(roomUrl, token) {
+            if (!roomUrl || !token) {
+                throw new Error('Missing room URL or authentication token');
+            }
+
+            try {
+                await window.videoService.initialize(
+                    'video-container',
+                    roomUrl,
+                    token,
+                    {
+                        onJoined: this.handleVideoJoined,
+                        onParticipantJoined: this.handleParticipantJoined,
+                        onParticipantLeft: this.handleParticipantLeft,
+                        onError: this.handleVideoError,
+                        onDeviceError: this.handleDeviceError
+                    }
+                );
+                this.videoInitialized = true;
+                console.log('Video session initialized successfully');
+            } catch (error) {
+                console.error('Video initialization failed:', error);
+                throw error;
             }
         },
 
         async initializeFaceDetection() {
             try {
-                await faceapi.nets.tinyFaceDetector.loadFromUri('/assets/models');
-                await faceapi.nets.faceLandmark68Net.loadFromUri('/assets/models');
+                await window.faceDetectionService.initialize();
+                const videoElement = document.querySelector('#video-container video');
+                if (!videoElement) {
+                    throw new Error('Video element not found');
+                }
 
-                setInterval(async () => {
-                    const detections = await faceapi.detectAllFaces(
-                        this.video,
-                        new faceapi.TinyFaceDetectorOptions()
-                    );
-                    this.faceDetected = detections.length > 0;
-                }, 1000);
+                window.faceDetectionService.startDetection(
+                    videoElement, 
+                    (detected) => {
+                        this.faceDetected = detected;
+                        console.log('Face detection status:', detected);
+                    }
+                );
             } catch (error) {
                 console.error('Face detection initialization failed:', error);
+                throw error;
             }
         },
 
         async initializeSpeechRecognition() {
             try {
-                const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
-                if (!SpeechRecognition) {
-                    throw new Error('Speech recognition not supported in this browser.');
-                }
-
-                const recognition = new SpeechRecognition();
-                recognition.continuous = true;
-                recognition.interimResults = true;
-
-                recognition.onresult = (event) => {
-                    let interim = '';
-                    let final = '';
-
-                    for (let i = event.resultIndex; i < event.results.length; i++) {
-                        const result = event.results[i];
-                        if (result.isFinal) {
-                            final += result[0].transcript;
-                        } else {
-                            interim += result[0].transcript;
-                        }
+                await window.speechRecognitionService.initialize((result) => {
+                    if (result.final) {
+                        this.transcription = result.final;
+                    } else if (result.interim) {
+                        this.transcription = `${this.transcription} ${result.interim}`;
                     }
-
-                    this.interimTranscript = interim;
-                    this.finalTranscript = final.trim();
-                    this.transcription = final.trim();
-                };
-
-                recognition.onerror = (event) => console.error('Speech recognition error:', event.error);
-
-                this.speechRecognitionService = recognition;
+                });
             } catch (error) {
                 console.error('Speech recognition initialization failed:', error);
+                throw error;
             }
         },
 
-        loadQuestions() {
-            // Assuming questions are statically available in a global variable or API
-            this.questions = window.interviewQuestions || [];
-            this.currentQuestion = this.questions[0];
+        setupQuestionTimer() {
+            if (this.timer) {
+                clearInterval(this.timer);
+            }
+
+            this.timeLeft = this.currentQuestion.timeLimit || 120;
+            this.timer = setInterval(() => {
+                if (this.timeLeft > 0) {
+                    this.timeLeft--;
+                } else {
+                    clearInterval(this.timer);
+                    if (this.isAnswering) {
+                        this.stopAnswering();
+                    }
+                }
+            }, 1000);
         },
 
-        startAnswering() {
-            this.isAnswering = true;
-            this.transcription = '';
-            this.interimTranscript = '';
-            this.speechRecognitionService.start();
+        async startAnswering() {
+            try {
+                if (!this.videoInitialized || !this.faceDetected) {
+                    throw new Error('Please ensure your camera is working and face is visible');
+                }
+
+                this.isAnswering = true;
+                this.transcription = '';
+                await window.speechRecognitionService.start();
+                console.log('Started recording answer');
+            } catch (error) {
+                console.error('Failed to start answering:', error);
+                this.videoError = error.message;
+                this.isAnswering = false;
+            }
         },
 
-        stopAnswering() {
-            this.isAnswering = false;
-            this.speechRecognitionService.stop();
-            this.submitAnswer();
+        async stopAnswering() {
+            try {
+                if (!this.isAnswering) return;
+
+                this.isAnswering = false;
+                await window.speechRecognitionService.stop();
+                console.log('Stopped recording answer');
+                await this.submitAnswer();
+            } catch (error) {
+                console.error('Failed to stop answering:', error);
+                this.videoError = error.message;
+            }
         },
 
         async submitAnswer() {
             try {
-                const answer = {
-                    question: this.currentQuestion.question,
-                    answer: this.transcription || 'No answer provided',
-                };
-
-                const response = await fetch(`http://localhost:5000/api/interviews/answer`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        Authorization: `Bearer ${this.token}`,
-                    },
-                    body: JSON.stringify(answer),
-                });
-
-                if (!response.ok) {
-                    throw new Error('Failed to submit the answer.');
+                if (!this.transcription) {
+                    throw new Error('No answer recorded');
                 }
 
-                const analysis = await response.json();
-                this.answers.push({
-                    ...answer,
-                    analysis,
-                });
+                const answerData = {
+                    questionId: this.currentQuestion.id,
+                    question: this.currentQuestion.question,
+                    answer: this.transcription,
+                    duration: this.currentQuestion.timeLimit - this.timeLeft,
+                    faceDetectionScore: this.faceDetected ? 1 : 0
+                };
+
+                await window.api.submitAnswer(
+                    this.currentInterviewId, 
+                    answerData
+                );
+
+                console.log('Answer submitted successfully');
+                this.progressToNextQuestion();
             } catch (error) {
-                console.error('Answer submission failed:', error);
-                alert('Error submitting answer. Try again.');
+                console.error('Answer Submission Error:', error);
+                this.videoError = 'Failed to submit answer: ' + error.message;
             }
         },
 
-        endInterview() {
-            this.isLoggedIn = false;
-            this.interviewStarted = false;
-            alert('Interview completed successfully!');
+        progressToNextQuestion() {
+            if (this.timer) {
+                clearInterval(this.timer);
+            }
+
+            if (this.currentQuestionIndex < this.questions.length - 1) {
+                this.currentQuestionIndex++;
+                this.currentQuestion = this.questions[this.currentQuestionIndex];
+                this.transcription = '';
+                this.setupQuestionTimer();
+            } else {
+                this.endInterview();
+            }
         },
+
+        async endInterview() {
+            try {
+                console.log('Ending interview session...');
+                
+                // Stop all services
+                await window.videoService.cleanup();
+                window.faceDetectionService.stopDetection();
+                window.speechRecognitionService.stop();
+                
+                const response = await window.api.endInterview(this.currentInterviewId);
+                console.log('Interview ended successfully:', response);
+                
+                this.interviewResults = response.data;
+                this.showResults = true;
+                this.isLoggedIn = false;
+            } catch (error) {
+                console.error('Interview End Error:', error);
+                this.videoError = 'Failed to end interview: ' + error.message;
+            }
+        },
+
+        handleVideoJoined(event) {
+            console.log('Video session joined:', event);
+        },
+
+        handleParticipantJoined(event) {
+            console.log('Remote participant joined:', event);
+            this.remoteParticipantJoined = true;
+        },
+
+        handleParticipantLeft(event) {
+            console.log('Remote participant left:', event);
+            this.remoteParticipantJoined = false;
+        },
+
+        handleVideoError(error) {
+            console.error('Video Session Error:', error);
+            this.videoError = error.message || 'Video session error occurred';
+        },
+
+        handleDeviceError(error) {
+            console.error('Device Error:', error);
+            const device = error.type === 'camera-error' ? 'camera' : 'microphone';
+            this.deviceStatus[device] = false;
+            this.videoError = `Unable to access ${device}. Please check permissions and try again.`;
+        },
+
+        async cleanup() {
+            console.log('Cleaning up interview session...');
+            
+            if (this.timer) {
+                clearInterval(this.timer);
+                this.timer = null;
+            }
+
+            if (this.isLoggedIn) {
+                try {
+                    await this.endInterview();
+                } catch (error) {
+                    console.error('Cleanup error:', error);
+                }
+            }
+
+            window.videoService.cleanup();
+            window.faceDetectionService.stopDetection();
+            window.speechRecognitionService.stop();
+            
+            this.resetInterviewState();
+        }
     },
 
     mounted() {
-        console.log('App mounted and ready.');
+        window.addEventListener('beforeunload', (event) => {
+            if (this.isLoggedIn) {
+                event.preventDefault();
+                event.returnValue = 'Are you sure you want to leave? Your interview progress will be lost.';
+            }
+        });
     },
 
     beforeUnmount() {
-        if (this.stream) {
-            this.stream.getTracks().forEach((track) => track.stop());
-        }
-    },
+        this.cleanup();
+    }
 }).mount('#app');

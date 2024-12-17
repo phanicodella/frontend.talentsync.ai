@@ -1,212 +1,185 @@
-// frontend/src/js/components/InterviewDashboard.js
+
 const InterviewDashboard = {
-  props: {
-      interviewResults: {
-          type: Object,
-          required: true
-      }
-  },
+    props: {
+        interviewResults: {
+            type: Object,
+            required: true
+        }
+    },
 
-  data() {
-      return {
-          errorMessage: null,
-          isExporting: false
-      };
-  },
+    data() {
+        return {
+            formattedResults: null,
+             isExporting: false,
+            isSharing: false,
+            shareEmail: '',
+            error: null,
+            successMessage: null
+        };
+    },
 
-  computed: {
-      overallScore() {
-          if (!this.interviewResults?.answers?.length) return 0;
-          const scores = this.interviewResults.answers.map(answer => 
-              (answer.analysis.clarity + answer.analysis.relevance + answer.analysis.confidence) / 3
-          );
-          return Math.round((scores.reduce((a, b) => a + b) / scores.length) * 10);
-      },
+    created() {
+        this.formattedResults = window.resultsService.formatResults(this.interviewResults);
+    },
 
-      formattedDate() {
-          return new Date(this.interviewResults.startTime).toLocaleString();
-      },
+    methods: {
+        async exportPDF() {
+            this.isExporting = true;
+            this.error = null;
+            try {
+                await window.resultsService.generateReport(this.interviewResults._id);
+                this.successMessage = 'Report downloaded successfully';
+            } catch (error) {
+                this.error = 'Failed to generate PDF. Please try again.';
+                console.error('PDF generation failed:', error);
+            } finally {
+                this.isExporting = false;
+                setTimeout(() => this.successMessage = null, 3000);
+            }
+        },
 
-      totalDuration() {
-          if (!this.interviewResults.startTime || !this.interviewResults.endTime) return 0;
-          return Math.round((new Date(this.interviewResults.endTime) - new Date(this.interviewResults.startTime)) / 1000);
-      }
-  },
+        async shareResults() {
+            if (!this.shareEmail) {
+                this.error = 'Please enter an email address';
+                return;
+            }
 
-  methods: {
-      getScoreClass(score) {
-          if (score >= 80) return 'bg-success';
-          if (score >= 60) return 'bg-info';
-          if (score >= 40) return 'bg-warning';
-          return 'bg-danger';
-      },
+            this.isSharing = true;
+            this.error = null;
+            try {
+                await window.resultsService.shareResults(
+                    this.interviewResults._id, 
+                    this.shareEmail
+                );
+                this.successMessage = 'Results shared successfully';
+                this.shareEmail = '';
+            } catch (error) {
+                this.error = 'Failed to share results. Please try again.';
+                console.error('Sharing results failed:', error);
+            } finally {
+                this.isSharing = false;
+                setTimeout(() => this.successMessage = null, 3000);
+            }
+        }
+    },
 
-      formatDuration(seconds) {
-          const minutes = Math.floor(seconds / 60);
-          const remainingSeconds = seconds % 60;
-          return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
-      },
+    template: `
+        <div class="interview-dashboard card">
+            <div class="card-header bg-primary text-white">
+                <h3 class="mb-0">Interview Results</h3>
+            </div>
 
-      async exportPDF() {
-          this.isExporting = true;
-          try {
-              const response = await fetch(`${window.CONFIG.API_BASE_URL}/interviews/${this.interviewResults._id}/export-pdf`, {
-                  method: 'POST'
-              });
-              
-              if (!response.ok) throw new Error('Export failed');
-              
-              const blob = await response.blob();
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `interview-results-${this.interviewResults._id}.pdf`;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
-          } catch (error) {
-              this.errorMessage = 'Failed to export PDF. Please try again.';
-              setTimeout(() => this.errorMessage = null, 3000);
-          } finally {
-              this.isExporting = false;
-          }
-      },
+            <!-- Alerts -->
+            <div v-if="error" class="alert alert-danger alert-dismissible fade show m-3" role="alert">
+                {{ error }}
+                <button type="button" class="btn-close" @click="error = null"></button>
+            </div>
+            <div v-if="successMessage" class="alert alert-success alert-dismissible fade show m-3" role="alert">
+                {{ successMessage }}
+                <button type="button" class="btn-close" @click="successMessage = null"></button>
+            </div>
 
-      async shareResults() {
-          if (!this.interviewResults?.candidate?.email) {
-              this.errorMessage = 'No email address available';
-              setTimeout(() => this.errorMessage = null, 3000);
-              return;
-          }
+            <div class="card-body">
+                <!-- Candidate Information -->
+                <div class="candidate-info mb-4">
+                    <h4>Candidate Information</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Name:</strong> {{ formattedResults.candidateInfo.name }}</p>
+                            <p><strong>Email:</strong> {{ formattedResults.candidateInfo.email }}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Date:</strong> {{ formattedResults.candidateInfo.date }}</p>
+                            <p><strong>Duration:</strong> {{ formattedResults.candidateInfo.duration }}</p>
+                        </div>
+                    </div>
+                </div>
 
-          try {
-              const response = await fetch(`${window.CONFIG.API_BASE_URL}/interviews/${this.interviewResults._id}/share`, {
-                  method: 'POST',
-                  headers: {
-                      'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                      email: this.interviewResults.candidate.email
-                  })
-              });
+                <!-- Overall Performance -->
+                <div class="performance-summary mb-4">
+                    <h4>Overall Performance</h4>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="score-card p-3 bg-light rounded">
+                                <h5 class="mb-2">Overall Score</h5>
+                                <div class="progress" style="height: 25px;">
+                                    <div class="progress-bar" 
+                                         :class="getScoreClass(formattedResults.performance.overallScore)"
+                                         :style="{ width: formattedResults.performance.overallScore + '%' }">
+                                        {{ formattedResults.performance.overallScore }}%
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stats p-3 bg-light rounded">
+                                <p><strong>Questions Answered:</strong> {{ formattedResults.performance.questionsAnswered }}</p>
+                                <p><strong>Average Response Time:</strong> {{ formattedResults.performance.averageResponseTime }}s</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
 
-              if (!response.ok) throw new Error('Failed to share results');
-              
-              alert('Results have been shared successfully!');
-          } catch (error) {
-              this.errorMessage = 'Failed to share results. Please try again.';
-              setTimeout(() => this.errorMessage = null, 3000);
-          }
-      }
-  },
+                <!-- Detailed Answers -->
+                <div class="answer-details mb-4">
+                    <h4>Response Analysis</h4>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Question</th>
+                                    <th>Score</th>
+                                    <th>Key Points</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="answer in formattedResults.answers" :key="answer.question">
+                                    <td>{{ answer.question }}</td>
+                                    <td>
+                                        <div class="progress">
+                                            <div class="progress-bar" 
+                                                 :class="getScoreClass(answer.score)"
+                                                 :style="{ width: answer.score + '%' }">
+                                                {{ answer.score }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <ul class="list-unstyled mb-0">
+                                            <li v-for="point in answer.analysis.keyPoints">{{ point }}</li>
+                                        </ul>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
 
-  template: `
-      <div class="interview-results p-4">
-          <div v-if="errorMessage" class="alert alert-danger">{{ errorMessage }}</div>
-          
-          <div class="card">
-              <div class="card-header bg-primary text-white">
-                  <h3 class="m-0">Interview Results</h3>
-              </div>
-              
-              <div class="card-body">
-                  <div class="row mb-4">
-                      <div class="col-md-6">
-                          <h4>Candidate Information</h4>
-                          <p><strong>Name:</strong> {{ interviewResults.candidateName }}</p>
-                          <p><strong>Email:</strong> {{ interviewResults.candidate }}</p>
-                          <p><strong>Interview Date:</strong> {{ formattedDate }}</p>
-                          <p><strong>Duration:</strong> {{ formatDuration(totalDuration) }}</p>
-                      </div>
-                      
-                      <div class="col-md-6">
-                          <h4>Overall Performance</h4>
-                          <div class="progress mb-3" style="height: 30px">
-                              <div class="progress-bar" 
-                                   :class="getScoreClass(overallScore)"
-                                   :style="{ width: overallScore + '%' }">
-                                  {{ overallScore }}%
-                              </div>
-                          </div>
-                      </div>
-                  </div>
-
-                  <div class="table-responsive mb-4">
-                      <table class="table table-bordered">
-                          <thead class="table-light">
-                              <tr>
-                                  <th>Question</th>
-                                  <th>Score</th>
-                                  <th>Duration</th>
-                              </tr>
-                          </thead>
-                          <tbody>
-                              <tr v-for="answer in interviewResults.answers" :key="answer.question">
-                                  <td>{{ answer.question }}</td>
-                                  <td>
-                                      <div class="progress">
-                                          <div class="progress-bar" 
-                                               :class="getScoreClass((answer.analysis.clarity + answer.analysis.relevance + answer.analysis.confidence) / 3 * 10)"
-                                               :style="{ width: ((answer.analysis.clarity + answer.analysis.relevance + answer.analysis.confidence) / 3 * 10) + '%' }">
-                                              {{ Math.round((answer.analysis.clarity + answer.analysis.relevance + answer.analysis.confidence) / 3 * 10) }}%
-                                          </div>
-                                      </div>
-                                  </td>
-                                  <td>{{ formatDuration(answer.duration) }}</td>
-                              </tr>
-                          </tbody>
-                      </table>
-                  </div>
-
-                  <div class="row mb-4">
-                      <div class="col-md-6">
-                          <h4>Strengths</h4>
-                          <ul class="list-group">
-                              <li v-for="strength in interviewResults.feedback?.strengths" 
-                                  class="list-group-item text-success">
-                                  <i class="bi bi-check-circle me-2"></i>
-                                  {{ strength }}
-                              </li>
-                          </ul>
-                      </div>
-                      
-                      <div class="col-md-6">
-                          <h4>Areas for Improvement</h4>
-                          <ul class="list-group">
-                              <li v-for="improvement in interviewResults.feedback?.improvements" 
-                                  class="list-group-item text-primary">
-                                  <i class="bi bi-arrow-up-circle me-2"></i>
-                                  {{ improvement }}
-                              </li>
-                          </ul>
-                      </div>
-                  </div>
-
-                  <div class="feedback-section mb-4">
-                      <h4>Detailed Feedback</h4>
-                      <div class="card">
-                          <div class="card-body">
-                              {{ interviewResults.feedback?.aiAnalysis }}
-                          </div>
-                      </div>
-                  </div>
-
-                  <div class="d-flex justify-content-center gap-3">
-                      <button @click="exportPDF" 
-                              class="btn btn-primary" 
-                              :disabled="isExporting">
-                          {{ isExporting ? 'Exporting...' : 'Export PDF' }}
-                      </button>
-                      <button @click="shareResults" 
-                              class="btn btn-secondary">
-                          Share Results
-                      </button>
-                  </div>
-              </div>
-          </div>
-      </div>
-  `
+                <!-- Actions -->
+                <div class="actions d-flex justify-content-between align-items-center">
+                    <div class="export-action">
+                        <button class="btn btn-primary" 
+                                @click="exportPDF"
+                                :disabled="isExporting">
+                            {{ isExporting ? 'Generating...' : 'Export PDF' }}
+                        </button>
+                    </div>
+                    <div class="share-action d-flex gap-2">
+                        <input type="email" 
+                               v-model="shareEmail" 
+                               class="form-control" 
+                               placeholder="Enter email to share">
+                        <button class="btn btn-secondary" 
+                                @click="shareResults"
+                                :disabled="isSharing">
+                            {{ isSharing ? 'Sharing...' : 'Share Results' }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `
 };
 
+// Register the component globally
 window.InterviewDashboard = InterviewDashboard;

@@ -1,4 +1,4 @@
-const utils = {
+window.utils = {
     formatTime(seconds) {
         const minutes = Math.floor(seconds / 60);
         const remainingSeconds = seconds % 60;
@@ -17,5 +17,3 @@ const utils = {
         return text.trim().replace(/\s\s+/g, ' ');
     }
 };
-
-window.utils = utils;

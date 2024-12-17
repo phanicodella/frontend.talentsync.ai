@@ -5,126 +5,187 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TalentSync - AI-Powered Interview Platform</title>
     
-    <!-- Performance Optimization: Preload Critical Assets -->
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" as="style">
-    <link rel="preload" href="https://unpkg.com/vue@3/dist/vue.global.js" as="script">
-    <link rel="preload" href="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js" as="script">
-    
     <!-- Stylesheets -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
     <link href="/css/styles.css" rel="stylesheet">
     
-    <!-- SEO and Performance Meta Tags -->
-    <meta name="description" content="AI-powered interview platform for seamless candidate assessments">
-    <meta name="keywords" content="AI interview, talent assessment, interview platform">
-    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
-    
-    <!-- Open Graph / Facebook -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://talentsync.ai">
-    <meta property="og:title" content="TalentSync - AI Interview Platform">
-    <meta property="og:description" content="Revolutionary AI-powered interview assessment tool">
-    
-    <!-- Twitter -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="TalentSync - AI Interview Platform">
+    <!-- Pre-load Dependencies -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://unpkg.com/@daily-co/daily-js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/face-api.js"></script>
 </head>
 <body>
     <div id="app">
+        <!-- Navigation -->
         <nav class="navbar navbar-dark bg-primary">
-            <div class="container-fluid">
-                <span class="navbar-brand mb-0 h1">TalentSync</span>
+            <div class="container">
+                <span class="navbar-brand">TalentSync</span>
+                <div class="d-flex align-items-center text-white" v-if="isLoggedIn">
+                    <span class="me-3">{{ name }}</span>
+                    <button @click="cleanup" class="btn btn-outline-light btn-sm">End Interview</button>
+                </div>
             </div>
         </nav>
 
         <div class="container mt-4">
-            <!-- Login Section -->
+            <!-- Login Form -->
             <div v-if="!isLoggedIn" class="card p-4">
                 <h3>Welcome to TalentSync</h3>
-                <p class="text-muted">Your AI-powered interview platform</p>
+                <p class="text-muted">Enter your details to start the interview</p>
+                
                 <div class="mb-3">
-                    <label class="form-label">Email:</label>
-                    <input type="email" v-model="email" class="form-control" required aria-describedby="emailHelp">
+                    <label class="form-label">Email</label>
+                    <input 
+                        type="email" 
+                        v-model="email" 
+                        class="form-control" 
+                        :disabled="isLoading"
+                        placeholder="Enter your email"
+                    >
                 </div>
+                
                 <div class="mb-3">
-                    <label class="form-label">Name:</label>
-                    <input type="text" v-model="name" class="form-control" required>
+                    <label class="form-label">Full Name</label>
+                    <input 
+                        type="text" 
+                        v-model="name" 
+                        class="form-control" 
+                        :disabled="isLoading"
+                        placeholder="Enter your full name"
+                    >
                 </div>
-                <button @click="startInterview" class="btn btn-primary" :disabled="!email || !name">
-                    Begin Interview
+
+                <button 
+                    @click="startInterview" 
+                    class="btn btn-primary"
+                    :disabled="!email || !name || isLoading"
+                >
+                    <span v-if="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+                    Start Interview
                 </button>
             </div>
 
-            <!-- Interview Section -->
+            <!-- Interview Interface -->
             <div v-if="isLoggedIn" class="interview-container">
-                <div class="video-section">
-                    <div class="video-container">
-                        <video id="video" autoplay muted></video>
+                <div class="row">
+                    <!-- Video Section -->
+                    <div class="col-md-8">
+                        <div class="card mb-3">
+                            <div class="card-body p-0">
+                                <div id="video-container" class="video-container">
+                                    <!-- Video will be added here by Daily.co -->
+                                </div>
+                            </div>
+                            <div class="card-footer">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="device-status">
+                                        <span class="me-3">
+                                            <i class="bi" :class="deviceStatus.camera ? 'bi-camera-video-fill text-success' : 'bi-camera-video-off text-danger'"></i>
+                                            Camera
+                                        </span>
+                                        <span class="me-3">
+                                            <i class="bi" :class="deviceStatus.microphone ? 'bi-mic-fill text-success' : 'bi-mic-mute text-danger'"></i>
+                                            Microphone
+                                        </span>
+                                    </div>
+                                    <div class="face-detection-status">
+                                        <span :class="['status-indicator', faceDetected ? 'status-active' : 'status-inactive']"></span>
+                                        Face Detection: {{faceDetected ? 'Active' : 'Not Detected'}}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="status-bar mt-2">
-                        <span class="status-indicator" :class="faceDetected ? 'status-active' : 'status-inactive'"></span>
-                        Face Detection: {{faceDetected ? 'Active' : 'Not Detected'}}
-                    </div>
-                </div>
-    
-                <div class="interview-panel">
-                    <h4>Interview Progress</h4>
-                    <div class="question-display">
-                        <h5>{{currentQuestion?.question}}</h5>
-                    </div>
-                    <div v-if="isAnswering" class="timer text-muted mb-2">
-                        Time remaining: {{timeLeft}} seconds
-                    </div>
-        
-                    <div class="controls">
-                        <button 
-                            @click="isAnswering ? stopAnswering() : startAnswering()" 
-                            class="btn"
-                            :class="isAnswering ? 'btn-danger' : 'btn-success'"
-                        >
-                            {{isAnswering ? 'Stop Answer' : 'Start Answer'}}
-                        </button>
-                    </div>
-    
-                    <div class="response-area mt-3">
-                        <strong>Your Answer:</strong>
-                        <p v-if="transcription">{{transcription}}</p>
-                        <p v-else class="text-muted">Your response will appear here as you speak...</p>
-                    </div>
-                    <div v-if="showResults">
-                        <interview-dashboard :interview-results="interviewResults"></interview-dashboard>
-                    </div>
-                    <div class="progress mb-3">
-                        <div class="progress-bar" 
-                             :style="{ width: (((currentQuestionIndex + 1) / questions.length) * 100) + '%' }">
-                            Question {{currentQuestionIndex + 1}} of {{questions.length}}
+
+                    <!-- Interview Control Panel -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h4 class="mb-0">Interview Progress</h4>
+                            </div>
+                            <div class="card-body">
+                                <div class="question-display mb-3">
+                                    <h5>{{currentQuestion?.question}}</h5>
+                                </div>
+
+                                <div v-if="isAnswering" class="timer text-muted mb-2">
+                                    Time remaining: {{timeLeft}} seconds
+                                </div>
+
+                                <div class="controls mb-3">
+                                    <button 
+                                        @click="isAnswering ? stopAnswering() : startAnswering()" 
+                                        class="btn w-100"
+                                        :class="isAnswering ? 'btn-danger' : 'btn-success'"
+                                        :disabled="!videoInitialized || !faceDetected"
+                                    >
+                                        <i class="bi" :class="isAnswering ? 'bi-stop-fill' : 'bi-play-fill'"></i>
+                                        {{isAnswering ? 'Stop Answer' : 'Start Answer'}}
+                                    </button>
+                                </div>
+
+                                <div class="response-area p-3 bg-light rounded">
+                                    <strong>Your Answer:</strong>
+                                    <p v-if="transcription" class="mt-2">{{transcription}}</p>
+                                    <p v-else class="text-muted mt-2">Your response will appear here as you speak...</p>
+                                </div>
+
+                                <div class="mt-3">
+                                    <div class="d-flex justify-content-between mb-1">
+                                        <small>Progress</small>
+                                        <small>{{currentQuestionIndex + 1}} / {{questions.length}}</small>
+                                    </div>
+                                    <div class="progress">
+                                        <div 
+                                            class="progress-bar" 
+                                            :style="{ width: ((currentQuestionIndex + 1) / questions.length * 100) + '%' }"
+                                            role="progressbar"
+                                        ></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="videoError" class="alert alert-danger mt-3">
+                            {{ videoError }}
+                            <button type="button" class="btn-close float-end" @click="videoError = null"></button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Results Modal -->
+            <div v-if="showResults" class="modal fade show" style="display: block" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">Interview Results</h5>
+                            <button type="button" class="btn-close" @click="showResults = false"></button>
+                        </div>
+                        <div class="modal-body">
+                            <interview-dashboard 
+                                :interview-results="interviewResults"
+                                @close="showResults = false"
+                            ></interview-dashboard>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-backdrop fade show"></div>
+            </div>
         </div>
     </div>
 
-    <!-- Performance Optimization: Defer Non-Critical Scripts -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-
-    <!-- Core Scripts with Async Loading -->
-    <script src="/js/constants.js" async></script>
-    <script src="/js/utils.js" async></script>
-    <script src="/js/services/api.js" async></script>
-    <script src="/js/questions.js" async></script>
-    <script src="/js/faceDetection.js" async></script>
-    <script src="/js/speechRecognition.js" async></script>
-    <script src="/js/analytics.js" async></script>
-    <script src="/js/app.js" async></script>
-
-    <!-- Optional: Performance and Analytics -->
-    <script>
-        // Basic performance tracking
-        window.addEventListener('load', () => {
-            console.log('Page fully loaded');
-        });
-    </script>
+    <!-- Application Scripts -->
+    <script src="/js/constants.js"></script>
+    <script src="/js/utils.js"></script>
+    <script src="/js/services/api.js"></script>
+    <script src="/js/services/videoService.js"></script>
+    <script src="/js/services/faceDetectionService.js"></script>
+    <script src="/js/services/speechRecognitionService.js"></script>
+    <script src="/js/services/authService.js"></script>
+    <script src="/js/components/InterviewDashboard.js"></script>
+    <script src="/js/app.js"></script>
 </body>
 </html>
